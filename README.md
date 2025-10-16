@@ -4,14 +4,14 @@ This repository contains a JavaScript implementation of a Random Dot Kinematogra
 
 The primary purpose of this tool is to serve as a motion adaptor for experiments investigating the "implied motion" theory of social attention.
 
-**Scientific Background
-**
+**Scientific Background**
+
 This project is directly inspired by the work of Guterstam & Graziano (2020) in their paper, "Implied motion as a possible mechanism for encoding other people’s attention." The core hypothesis is that the human brain perceives social cues, like another person's gaze, as a form of "implied motion" that can influence our own perception.
 
 To test this, a reliable motion adaptation stimulus is required. This RDK is a modernized, web-based replication of the stimulus used in classic motion perception studies (e.g., Kiani et al., 2008), designed to serve as the foundational tool for these new experiments.
 
-**Key Features
-**
+**Key Features**
+
 This RDK stimulus is highly configurable and replicates the key features of the original Matlab implementation, including:
 
 Configurable Coherence: Easily set the percentage of dots moving in a coherent direction.
@@ -34,8 +34,8 @@ HTML5 Canvas
 
 The project is currently in the validation phase. The core functionality is complete, and the stimulus is working. The current focus is on rigorously comparing the output of this JavaScript version to the original Matlab script to ensure a perfect 1-to-1 replication of the stimulus behavior.
 
-**How to Use
-**
+**How to Use**
+
 This stimulus is designed to be used as a JsPsych plugin. A basic trial can be configured as follows:
 
 // A basic JsPsych trial using the RDK plugin

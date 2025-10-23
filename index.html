@@ -151,7 +151,21 @@
         </div>
       `
     };
-    timeline.push(calibrate, instructions);
+
+    const practiceInstructions = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="center">
+          <h2>Practice Session</h2>
+          <p>You will now complete 10 practice trials with just the RDK (no adaptor).</p>
+          <p>This helps you get familiar with the task before the main experiment.</p>
+          <p>You need to achieve at least 80% accuracy to proceed to the main experiment.</p>
+          <p>Press any key to start practice.</p>
+        </div>
+      `
+    };
+
+    timeline.push(calibrate, instructions, practiceInstructions);
 
     function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
@@ -463,6 +477,48 @@
       };
     }
 
+    function practiceTrial({ directionDeg = 180 }) {
+      const itiMs = randInt(itiMinMs, itiMaxMs);
+      
+      const tooSlowScreen = {
+        type: jsPsychHtmlKeyboardResponse,
+        choices: 'NO_KEYS',
+        trial_duration: 1500,
+        stimulus: `<div class="center"><h3>Too Slow!</h3><p>Please respond faster.</p></div>`
+      };
+
+      const test = {
+        ...rdkTrial({ directionDeg: directionDeg, durationMs: testDurationMs }),
+        on_finish: (data) => {
+          const correctKey = directionDeg === 0 ? 'arrowright' : 'arrowleft';
+          data.correct = jsPsych.pluginAPI.compareKeys(data.response, correctKey);
+          data.phase = 'practice';
+          data.direction = directionDeg;
+        }
+      };
+
+      return {
+        timeline: [
+          { 
+            type: jsPsychHtmlKeyboardResponse, 
+            choices: 'NO_KEYS', 
+            trial_duration: itiMs, 
+            stimulus: '',
+            on_load: cleanup
+          },
+          fixationTrial(),
+          { timeline: [ test ], conditional_function: () => true },
+          { 
+            timeline: [ tooSlowScreen ], 
+            conditional_function: () => {
+              const last = jsPsych.data.get().last(1).values()[0];
+              return (typeof last.response === 'undefined' || last.response === null);
+            }
+          }
+        ]
+      };
+    }
+
     function twoPhaseTrial({ adaptorDirDeg, congruent }) {
       const testDirDeg = congruent ? adaptorDirDeg : (adaptorDirDeg === 0 ? 180 : 0);
       const itiMs = randInt(itiMinMs, itiMaxMs);
@@ -518,7 +574,57 @@
       };
     }
 
-    // Build trials
+    // Build practice trials
+    const practiceTrials = [];
+    for (let i = 0; i < 10; i++) {
+      const direction = Math.random() < 0.5 ? 0 : 180;
+      practiceTrials.push(practiceTrial({ directionDeg: direction }));
+    }
+    
+    // Practice success rate check
+    const practiceCheck = {
+      type: jsPsychHtmlKeyboardResponse,
+      choices: 'NO_KEYS',
+      trial_duration: 0,
+      stimulus: '',
+      on_load: () => {
+        const data = jsPsych.data.get();
+        const practiceData = data.filter({ phase: 'practice' });
+        const n = practiceData.count();
+        const correct = practiceData.filter({ correct: true }).count();
+        const accuracy = n > 0 ? correct / n : 0;
+        
+        if (accuracy < 0.8) {
+          // Redirect to main page
+          document.body.innerHTML = `
+            <div class="center">
+              <h2>Practice Session Complete</h2>
+              <p>Your accuracy was ${Math.round(accuracy * 100)}% (${correct}/${n} correct).</p>
+              <p>You need at least 80% accuracy to proceed with the main experiment.</p>
+              <p>Please return to the main page and try again.</p>
+              <button onclick="window.location.href='index.html'">Return to Main Page</button>
+            </div>
+          `;
+          jsPsych.endExperiment();
+        }
+      }
+    };
+
+    // Practice success message
+    const practiceSuccess = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="center">
+          <h2>Practice Session Complete</h2>
+          <p>Great job! You've successfully completed the practice session.</p>
+          <p>Now you'll proceed to the main experiment with the adaptor.</p>
+          <p>Press any key to continue.</p>
+        </div>
+      `,
+      choices: 'ALL_KEYS'
+    };
+
+    // Build main experiment trials
     const totalTrials = 30;
     const blockSize = 30;
     const congruencyList = [
@@ -543,7 +649,84 @@
       blocks.push({ timeline: block });
     }
     
+    // Add practice trials and check to timeline
+    timeline.push({ timeline: practiceTrials, randomize_order: false });
+    timeline.push({
+      timeline: [practiceCheck],
+      conditional_function: () => {
+        const data = jsPsych.data.get();
+        const practiceData = data.filter({ phase: 'practice' });
+        const n = practiceData.count();
+        const correct = practiceData.filter({ correct: true }).count();
+        const accuracy = n > 0 ? correct / n : 0;
+        return accuracy < 0.8; // Only show check if accuracy is below 80%
+      }
+    });
+    timeline.push({
+      timeline: [practiceSuccess],
+      conditional_function: () => {
+        const data = jsPsych.data.get();
+        const practiceData = data.filter({ phase: 'practice' });
+        const n = practiceData.count();
+        const correct = practiceData.filter({ correct: true }).count();
+        const accuracy = n > 0 ? correct / n : 0;
+        return accuracy >= 0.8; // Only show success message if accuracy is 80% or above
+      }
+    });
     timeline.push({ timeline: blocks, randomize_order: false });
+
+    // Survey questions
+    const surveyQuestions = [
+      "I feel that a person's attention is like a beam that travels from their eyes to the object they are looking at.",
+      "I have had the experience of 'feeling' someone's gaze on me, even when I couldn't see them.",
+      "Looking at someone or something is a completely passive act; no energy or force is involved.",
+      "I believe the 'evil eye' (the idea that a malicious stare can cause harm) is based on a real, even if subtle, phenomenon.",
+      "People can send 'energy' or 'vibes' to one another just by looking at them intently.",
+      "When I see someone staring at an object, I get a sense of an invisible 'connection' flowing between them.",
+      "I believe that intense staring or focus can have a subtle physical effect on the world."
+    ];
+
+    // Create survey trials
+    const surveyTrials = [];
+    surveyQuestions.forEach((question, index) => {
+      surveyTrials.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="center">
+            <h3>Survey Question ${index + 1} of ${surveyQuestions.length}</h3>
+            <p style="font-size: 18px; margin: 20px 0; line-height: 1.4;">${question}</p>
+            <p style="margin: 30px 0;">
+              <span style="margin-right: 20px;">1 - Highly Disagree</span>
+              <span style="margin-right: 20px;">2 - Disagree</span>
+              <span style="margin-right: 20px;">3 - Neutral</span>
+              <span style="margin-right: 20px;">4 - Agree</span>
+              <span>5 - Highly Agree</span>
+            </p>
+            <p>Press 1, 2, 3, 4, or 5 to respond.</p>
+          </div>
+        `,
+        choices: ['1', '2', '3', '4', '5'],
+        on_finish: (data) => {
+          data.survey_question = index + 1;
+          data.survey_question_text = question;
+          data.survey_response = parseInt(data.response);
+        }
+      });
+    });
+
+    // Add survey to timeline
+    timeline.push({ timeline: surveyTrials, randomize_order: false });
+    
+    // Add final trial to trigger results
+    timeline.push({
+      type: jsPsychHtmlKeyboardResponse,
+      choices: 'NO_KEYS',
+      trial_duration: 0,
+      stimulus: '',
+      on_load: () => {
+        showResultsAndMenu();
+      }
+    });
 
     async function showResultsAndMenu() {
       cleanup();
@@ -573,6 +756,16 @@
         adaptorDirection: t.adaptorDirection,
         testDirection: t.testDirection
       }));
+
+      // Extract survey responses - filter for trials that have survey_question property
+      const allData = data.values();
+      const surveyResponses = allData
+        .filter(trial => trial.survey_question !== undefined)
+        .map(s => ({
+          question_number: s.survey_question,
+          question_text: s.survey_question_text,
+          response: s.survey_response
+        }));
 
       const payload = {
         experiment: 'motion-adaptation-rdk',
@@ -604,7 +797,8 @@
               testDurationMs: testDurationMs
             }
           },
-          trials: trialsMinimal
+          trials: trialsMinimal,
+          survey: surveyResponses
         }
       };
 
